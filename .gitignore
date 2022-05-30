@@ -1,2 +1,4 @@
 *.parquet
 .ipynb_checkpoints
+mlruns
+mlflow.db
