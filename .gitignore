@@ -1,4 +1,13 @@
 *.parquet
+
 .ipynb_checkpoints
+
 mlruns
+
 mlflow.db
+
+artifacts
+
+__pycache__
+
+*.pkl
