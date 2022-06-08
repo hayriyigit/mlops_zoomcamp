@@ -111,16 +111,19 @@ def run_model(df, categorical, dv, lr):
 
 @flow(task_runner = SequentialTaskRunner)
 def main(date = None):
+    logger = get_run_logger()
     mlflow.set_tracking_uri("sqlite:///mlflow.db")
     mlflow.set_experiment("orch_homework")
     train_path, val_path = get_paths(date).result()
     categorical = ['PUlocationID', 'DOlocationID']
 
     df_train = read_data(train_path)
-    df_train_processed = prepare_features(df_train, categorical).result()
+    logger.warning(type(df_train))
+    df_train_processed = prepare_features(df_train, categorical)
+    logger.warning(type(df_train_processed))
 
     df_val = read_data(val_path)
-    df_val_processed = prepare_features(df_val, categorical, False).result()
+    df_val_processed = prepare_features(df_val, categorical, False)
 
     # train the model
     lr, dv = train_model(df_train_processed, categorical).result()
@@ -130,6 +133,7 @@ def main(date = None):
             pickle.dump(lr, model)
 
     run_model(df_val_processed, categorical, dv, lr)
+
 
 DeploymentSpec(
     name="model_training_hw",
