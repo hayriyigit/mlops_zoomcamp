@@ -1,8 +1,15 @@
-import os
 import pandas as pd
 import mlflow
 import uuid
 import sys
+
+from datetime import datetime
+
+from prefect import task, flow, get_run_logger
+from prefect.context import get_run_context
+
+from dateutil.relativedelta import relativedelta
+
 
 def generate_uuids(n):
     ride_ids = []
@@ -38,16 +45,17 @@ def load_model(run_id):
     model = mlflow.pyfunc.load_model(logged_model)
     return model
 
+def get_paths(run_date, taxi_type, run_id):
+    prev_month = run_date - relativedelta(months=1)
+    year = prev_month.year
+    month = prev_month.month 
 
-def apply_model(input_file, run_id, output_file):
+    input_file = f'https://s3.amazonaws.com/nyc-tlc/trip+data/{taxi_type}_tripdata_{year:04d}-{month:02d}.parquet'
+    output_file = f'output/{taxi_type}/{year:04d}-{month:02d}.parquet'
 
-    df = read_dataframe(input_file)
-    dicts = prepare_dictionaries(df)
+    return input_file, output_file
 
-    
-    model = load_model(run_id)
-    y_pred = model.predict(dicts)
-
+def save_results(df, y_pred, run_id, output_file):
     df_result = pd.DataFrame()
     df_result['ride_id'] = df['ride_id']
     df_result['lpep_pickup_datetime'] = df['lpep_pickup_datetime']
@@ -57,8 +65,46 @@ def apply_model(input_file, run_id, output_file):
     df_result['predicted_duration'] = y_pred
     df_result['diff'] = df_result['actual_duration'] - df_result['predicted_duration']
     df_result['model_version'] = run_id
-    
+
     df_result.to_parquet(output_file, index=False)
+
+@task
+def apply_model(input_file, run_id, output_file):
+
+    logger = get_run_logger()
+
+    logger.info(f'reading the data from {input_file}...')
+    df = read_dataframe(input_file)
+    dicts = prepare_dictionaries(df)
+
+    logger.info(f'loading the model with RUN_ID={run_id}...')
+    model = load_model(run_id)
+
+    logger.info(f'applying the model...')
+    y_pred = model.predict(dicts)
+
+    logger.info(f'saving the result to {output_file}...')
+
+    save_results(df, y_pred, run_id, output_file)
+    return output_file
+
+
+@flow
+def ride_duration_prediction(
+        taxi_type: str,
+        run_id: str,
+        run_date: datetime = None):
+    if run_date is None:
+        ctx = get_run_context()
+        run_date = ctx.flow_run.expected_start_time
+    
+    input_file, output_file = get_paths(run_date, taxi_type, run_id)
+
+    apply_model(
+        input_file=input_file,
+        run_id=run_id,
+        output_file=output_file
+    )
 
 def run():
     taxi_type = sys.argv[1]
@@ -67,11 +113,11 @@ def run():
 
     run_id = sys.argv[4]
 
-    input_file = f'https://s3.amazonaws.com/nyc-tlc/trip+data/{taxi_type}_tripdata_{year:04d}-{month:02d}.parquet'
-    output_file = f'output/{taxi_type}/{year:04d}-{month:02d}.parquet'
-
-
-    apply_model(input_file=input_file, run_id=run_id, output_file=output_file)
+    ride_duration_prediction(
+        taxi_type=taxi_type,
+        run_id=run_id,
+        run_date=datetime(year=year, month=month, day=1)
+    )
 
 if __name__ == "__main__":
     run()
