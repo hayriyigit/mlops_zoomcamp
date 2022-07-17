@@ -10,7 +10,6 @@ from prefect.context import get_run_context
 
 from dateutil.relativedelta import relativedelta
 
-
 def generate_uuids(n):
     ride_ids = []
     for i in range(n):

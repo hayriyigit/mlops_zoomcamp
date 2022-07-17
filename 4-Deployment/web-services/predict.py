@@ -17,7 +17,7 @@ def predict(features):
 
 app = Flask('duration-prediction')
 
-@app.route('/predict', methods=['POST'])
+@app.route('/predict', methods=['POS'])
 def predict_endpoint():
     ride = request.get_json()
 
